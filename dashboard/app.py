@@ -123,6 +123,40 @@ DATA_DIR = BASE_DIR / "data"
 MODEL_DIR = BASE_DIR / "models"
 
 
+def setup_if_needed():
+    """Auto-generate data and train models if files don't exist (for cloud deployment)"""
+    if not (DATA_DIR / "risk_profiles.csv").exists() or not (MODEL_DIR / "best_model.pkl").exists():
+        import subprocess, sys
+        st.info("First run detected. Generating data and training models... (this takes ~2 minutes)")
+        
+        DATA_DIR.mkdir(exist_ok=True)
+        MODEL_DIR.mkdir(exist_ok=True)
+        
+        # run data generation
+        result = subprocess.run(
+            [sys.executable, str(BASE_DIR / "scripts" / "generate_data.py")],
+            capture_output=True, text=True, cwd=str(BASE_DIR)
+        )
+        if result.returncode != 0:
+            st.error(f"Data generation failed: {result.stderr}")
+            st.stop()
+        
+        # run training pipeline
+        result = subprocess.run(
+            [sys.executable, str(BASE_DIR / "scripts" / "train_pipeline.py")],
+            capture_output=True, text=True, cwd=str(BASE_DIR)
+        )
+        if result.returncode != 0:
+            st.error(f"Training failed: {result.stderr}")
+            st.stop()
+        
+        st.success("Setup complete! Data generated and models trained.")
+        st.cache_data.clear()
+        st.cache_resource.clear()
+
+setup_if_needed()
+
+
 @st.cache_data
 def load_data():
     risk_profiles = pd.read_csv(DATA_DIR / "risk_profiles.csv")
@@ -155,7 +189,7 @@ try:
     data_loaded = True
 except Exception as e:
     data_loaded = False
-    st.error(f"Data not found. Run the training pipeline first:\n```\npython scripts/generate_data.py\npython scripts/train_pipeline.py\n```\n\nError: {e}")
+    st.error(f"Failed to load data: {e}")
     st.stop()
 
 
